@@ -112,9 +112,38 @@ prices are published a day in advance — a transient outage should not punch a
 hole in cost accounting. `shelly_price_up` and `shelly_price_age_seconds` are
 what to look at if the figures stop moving.
 
-Setting `PRICE_ENABLED: "0"` turns the feed off and makes
-`PRICE_FIXED_EUR_PER_KWH` the whole tariff, so a flat-rate setup is a ConfigMap
-change rather than a different code path.
+On a flat tariff (`PRICE_MODE=flat`) the contracted price is what cost is
+computed from, used exactly as entered — no VAT arithmetic, so it matches the
+bill. The market price is still fetched and exposed as a separate component, on
+the grounds that the interesting question about a fixed deal is whether it is
+beating spot. Both end up on the same panel.
+
+The tariff comes from a gitignored `.env` and reaches the pod as a Secret
+rather than a committed ConfigMap. It is not really a secret, but it is nobody
+else's business, and it follows the same pattern as
+`k3s-gameservers/infrastructure/site.env`.
+
+## Where channel names come from
+
+A name set on the device wins over `devices.yaml`. The point is that a socket
+should be labelled once, in the place you are already looking at when you plug
+something in — the Shelly app — and have the graphs follow. `make set-name`
+writes the same field, so it can be done from the repo instead.
+
+The trade-off is deliberate: the `name` label is display, not identity.
+Renaming a socket ends one series and starts another, so a query that must
+survive a rename groups by `device` and `channel`, which are stable. Cost and
+energy totals per socket are the ones to watch for this.
+
+Two firmware details, both found the hard way:
+
+- `Switch.SetConfig` must be **POSTed** as a JSON-RPC body. Passing `config=`
+  in the query string works until the name contains an escaped quote, at which
+  point the firmware's parser fails with a misleading
+  `Missing required argument 'id'`.
+- Names are free text, so they reach Prometheus as label values and are
+  escaped accordingly. `promtool check metrics` on the exporter's output with
+  a name containing `"` and `\` passes.
 
 ## Host state not in this repo
 

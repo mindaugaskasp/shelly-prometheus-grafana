@@ -15,7 +15,12 @@ data:
     rule_files:
       - /etc/prometheus/rules/*.yaml
     scrape_configs:
+      # 15s rather than the 30s default so the live panel reacts at about the
+      # speed a kettle does. It roughly doubles the data to ~400 MB a year,
+      # which the volume absorbs easily, and leaves the 5-minute recording
+      # rules unaffected.
       - job_name: shelly
+        scrape_interval: 15s
         static_configs:
           - targets: ["shelly-exporter.energy.svc.cluster.local:9102"]
 ---

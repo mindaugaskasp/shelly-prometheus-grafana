@@ -8,9 +8,14 @@
 # the comment on each entry so a lease can be pinned without re-scanning;
 # `make discover` re-finds everything if they do move.
 #
-# `channels` maps the device's switch component id to the name you want on
-# the graphs. A plug has only switch:0; the Power Strip 4 Gen4 has
-# switch:0 through switch:3, one per socket.
+# `channels` is a FALLBACK label per switch component id. A name set on the
+# device itself -- in the Shelly app, or with
+# `make set-name HOST=... CH=... NAME="Freezer"` -- wins over it, so the usual
+# way to label a socket is to name it on the device and leave this alone.
+# `make names` shows what each device currently calls itself and its outputs.
+#
+# A plug has only switch:0; the Power Strip 4 Gen4 has switch:0 through
+# switch:3, one per socket.
 
 defaults:
   timeoutMs: 4000

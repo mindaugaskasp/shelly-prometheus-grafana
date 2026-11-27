@@ -23,8 +23,9 @@ KUBECTL ?= kubectl
 SUBNET ?= 192.168.0
 
 .PHONY: help install deploy build-image push-image devices-configmap \
-	status logs metrics targets reload verify discover probe toggle \
-	dashboards datasource port-forward print-scrape-config uninstall
+	tariff-secret status logs metrics targets reload verify discover probe \
+	toggle names set-name clear-name dashboards datasource port-forward \
+	print-scrape-config uninstall
 
 help:
 	@echo "make install             push-image + deploy -- the from-scratch path"
@@ -40,6 +41,9 @@ help:
 	@echo "make discover            sweep $(SUBNET).0/24 for Shelly devices and their models"
 	@echo "make probe HOST=<ip>     raw Shelly.GetStatus from one device"
 	@echo "make toggle HOST=<ip> CH=<n>   flip one channel, to work out which socket is which"
+	@echo "make names               what each device calls itself and its sockets"
+	@echo "make set-name HOST=<ip> CH=<n> NAME=\"Freezer\"   name a socket on the device itself"
+	@echo "make clear-name HOST=<ip> CH=<n>   clear it again"
 	@echo "make dashboards          hand dashboards/*.json to Grafana's sidecar as a ConfigMap"
 	@echo "make datasource          print the Grafana datasource to add, once"
 	@echo "make port-forward        open the energy Prometheus UI on :9091"
@@ -60,14 +64,30 @@ build-image:
 push-image: build-image
 	podman push --tls-verify=false $(IMAGE)
 
+ENV_FILE := .env
+
+# The tariff lives in the gitignored .env and reaches the pod as a Secret, so
+# the price is on the host and in the cluster but never in the repo.
+tariff-secret:
+	@test -f $(ENV_FILE) || { \
+		echo "$(ENV_FILE) is missing -- copy .env.example to $(ENV_FILE) and set your price per kWh" >&2; \
+		exit 1; }
+	@grep -qE '^PRICE_FLAT_EUR_PER_KWH=[0-9]*\.?[0-9]+' $(ENV_FILE) \
+		|| grep -qE '^PRICE_MODE=spot' $(ENV_FILE) \
+		|| { echo "$(ENV_FILE): set PRICE_FLAT_EUR_PER_KWH, or PRICE_MODE=spot" >&2; exit 1; }
+	$(KUBECTL) apply -f manifests/namespace.yaml
+	@$(KUBECTL) create secret generic shelly-tariff -n $(NAMESPACE) \
+		--from-env-file=$(ENV_FILE) --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	@# The tariff used to be a committed ConfigMap of the same name.
+	@$(KUBECTL) -n $(NAMESPACE) delete configmap shelly-tariff --ignore-not-found
+
 devices-configmap:
 	@$(KUBECTL) create configmap shelly-devices -n $(NAMESPACE) \
 		--from-file=devices.yaml=$(DEVICES) \
 		--dry-run=client -o yaml | $(KUBECTL) apply -f -
 
-deploy:
-	$(KUBECTL) apply -f manifests/namespace.yaml
-	$(KUBECTL) apply -f manifests/tariff.yaml -f manifests/rules.yaml
+deploy: tariff-secret
+	$(KUBECTL) apply -f manifests/rules.yaml
 	@$(MAKE) --no-print-directory devices-configmap KUBECTL="$(KUBECTL)"
 	@# Catches the "deployed a commit whose image was never pushed" case, which
 	@# otherwise only shows up as ImagePullBackOff a minute later.
@@ -77,6 +97,7 @@ deploy:
 	@# A mounted ConfigMap is only read at startup, so the checksum in the pod
 	@# template is what makes a devices.yaml edit actually take effect.
 	sed -e "s|__DEVICES_CHECKSUM__|$$(sha256sum $(DEVICES) | cut -c1-16)|" \
+		-e "s|__TARIFF_CHECKSUM__|$$(sha256sum $(ENV_FILE) | cut -c1-16)|" \
 		-e "s|__IMAGE__|$(IMAGE)|" \
 		manifests/exporter.yaml | $(KUBECTL) apply -f -
 	$(KUBECTL) apply -f manifests/prometheus.yaml
@@ -134,6 +155,58 @@ discover:
 probe:
 	@test -n "$(HOST)" || { echo "usage: make probe HOST=192.168.0.21" >&2; exit 1; }
 	@curl -s -m 5 "http://$(HOST)/rpc/Shelly.GetStatus"; echo
+
+# What each device calls itself and its outputs. A name set here wins over the
+# channels: mapping in devices.yaml, so this is the list the graphs use.
+names:
+	@sed -n 's/^  - name: \(.*\)/\1/p; s/^    host: \(.*\)/\1/p' $(DEVICES) \
+	| paste - - \
+	| while read -r name host; do \
+		cfg=$$(curl -s -m 5 "http://$$host/rpc/Shelly.GetConfig"); \
+		dev=$$(printf '%s' "$$cfg" | sed -n 's/.*"device":{"name":\("[^"]*"\|null\).*/\1/p'); \
+		printf '%-14s %-15s device=%s\n' "$$name" "$$host" "$$dev"; \
+		printf '%s' "$$cfg" | tr '{' '\n' | sed -n 's/^"switch:\([0-9]*\)":$$/\1/p' >/dev/null; \
+		for id in 0 1 2 3; do \
+			n=$$(curl -s -m 5 "http://$$host/rpc/Switch.GetConfig?id=$$id" \
+				| sed -n 's/.*"name":\("[^"]*"\|null\).*/\1/p'); \
+			[ -n "$$n" ] && printf '    switch:%s  %s\n' "$$id" "$$n"; \
+		done; \
+	done
+
+# Names the output on the device itself, so the Shelly app and Grafana agree
+# and devices.yaml needs no channels: entry at all.
+set-name: export SHELLY_NAME = $(NAME)
+set-name: export SHELLY_CH = $(CH)
+set-name:
+	@test -n "$(HOST)" -a -n "$(CH)" -a -n "$$SHELLY_NAME" || { \
+		echo 'usage: make set-name HOST=192.168.0.128 CH=1 NAME="Freezer"' >&2; exit 1; }
+	@# Two things make this fiddly. The name reaches the shell through the
+	@# environment, never interpolated into the command line, so quotes in it
+	@# cannot break the quoting. And it goes as a POSTed JSON-RPC body rather
+	@# than in the query string, because the firmware's query-string parser
+	@# rejects an escaped quote inside config= with a misleading
+	@# "Missing required argument 'id'".
+	@python3 -c 'import json,os,sys; json.dump({"id":1,"method":"Switch.SetConfig",\
+		"params":{"id":int(os.environ["SHELLY_CH"]),\
+		"config":{"name":os.environ["SHELLY_NAME"]}}}, sys.stdout)' \
+	| curl -sf -X POST "http://$(HOST)/rpc" -H 'Content-Type: application/json' \
+		--data-binary @- \
+	| grep -q '"result"' \
+		|| { echo "the device rejected the call" >&2; exit 1; }
+	@echo " -> set; the exporter relabels within META_TTL_MS (5 min by default)"
+
+# Clears a name, handing the label back to devices.yaml.
+clear-name: export SHELLY_CH = $(CH)
+clear-name:
+	@test -n "$(HOST)" -a -n "$(CH)" || { \
+		echo 'usage: make clear-name HOST=192.168.0.128 CH=1' >&2; exit 1; }
+	@python3 -c 'import json,os,sys; json.dump({"id":1,"method":"Switch.SetConfig",\
+		"params":{"id":int(os.environ["SHELLY_CH"]),"config":{"name":None}}}, sys.stdout)' \
+	| curl -sf -X POST "http://$(HOST)/rpc" -H 'Content-Type: application/json' \
+		--data-binary @- \
+	| grep -q '"result"' \
+		|| { echo "the device rejected the call" >&2; exit 1; }
+	@echo " -> cleared"
 
 # Flipping a socket is the only reliable way to map switch ids to the
 # physical outlets on the 4-socket strip.

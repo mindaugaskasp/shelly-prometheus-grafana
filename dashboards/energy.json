@@ -7,7 +7,8 @@
   "editable": true,
   "graphTooltip": 1,
   "time": { "from": "now-24h", "to": "now" },
-  "refresh": "1m",
+  "refresh": "10s",
+  "liveNow": true,
   "templating": {
     "list": [
       {
@@ -63,8 +64,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Price now (EUR/kWh)",
-      "description": "Day-ahead spot price for the configured zone plus fixed charges, with VAT applied. This is the figure the cost rules multiply by.",
+      "title": "Tariff now (EUR/kWh)",
+      "description": "The price consumption is being costed at. On a flat tariff this is your contracted price per kWh, straight from .env; in spot mode it is the day-ahead price plus fixed charges and VAT.",
       "datasource": { "type": "prometheus", "uid": "${ds}" },
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
       "targets": [
@@ -148,11 +149,54 @@
       }
     },
     {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Live draw",
+      "description": "What each channel is pulling right now. Scraped every 15 seconds and the dashboard refreshes every 10, so switching something on shows up here within about a quarter of a minute.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "shelly_power_watts{name=~\"$channel\"}",
+          "legendFormat": "{{name}}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "namePlacement": "left",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 1,
+          "min": 0,
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "plug-a" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "plug-b" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
+          { "matcher": { "id": "byName", "options": "mini-1pm" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
+          { "matcher": { "id": "byName", "options": "strip-socket-1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
+          { "matcher": { "id": "byName", "options": "strip-socket-2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d55181" } }] },
+          { "matcher": { "id": "byName", "options": "strip-socket-3" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "strip-socket-4" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#9085e9" } }] }
+        ]
+      }
+    },
+    {
       "id": 5,
       "type": "timeseries",
       "title": "Power by channel",
       "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 4 },
+      "gridPos": { "h": 9, "w": 16, "x": 8, "y": 4 },
       "targets": [
         {
           "refId": "A",
@@ -197,20 +241,25 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Electricity price (EUR/kWh)",
-      "description": "Spot is the raw day-ahead market price; total adds distribution, margin and VAT. Steps are 15 minutes because that is the market interval.",
+      "title": "Your tariff vs the market (EUR/kWh)",
+      "description": "Flat is the contracted price from .env and the flat line is the point: above the market you are overpaying, below it you are not. Spot steps every 15 minutes because that is the market interval. Costed is whichever one cost is actually computed from.",
       "datasource": { "type": "prometheus", "uid": "${ds}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
       "targets": [
         {
           "refId": "A",
           "expr": "shelly_price_eur_per_kwh{component=\"total\"}",
-          "legendFormat": "total"
+          "legendFormat": "costed at"
         },
         {
           "refId": "B",
           "expr": "shelly_price_eur_per_kwh{component=\"spot\"}",
-          "legendFormat": "spot"
+          "legendFormat": "market (spot)"
+        },
+        {
+          "refId": "C",
+          "expr": "shelly_price_eur_per_kwh{component=\"flat\"}",
+          "legendFormat": "my tariff"
         }
       ],
       "options": {
@@ -231,8 +280,9 @@
           }
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "total" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
-          { "matcher": { "id": "byName", "options": "spot" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] }
+          { "matcher": { "id": "byName", "options": "costed at" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "market (spot)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
+          { "matcher": { "id": "byName", "options": "my tariff" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 6] } }] }
         ]
       }
     },
@@ -262,7 +312,7 @@
           "unit": "kwatth",
           "decimals": 2,
           "min": 0,
-          "color": { "mode": "fixed", "fixedColor": "#3987e5" }
+          "color": { "mode": "palette-classic" }
         },
         "overrides": [
           { "matcher": { "id": "byName", "options": "plug-a" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
