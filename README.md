@@ -18,6 +18,7 @@ manifests/
   exporter.yaml            exporter Deployment + Service
   prometheus.yaml          dedicated Prometheus, 3y retention
   rules.yaml               energy and cost recording rules
+  datasource.yaml          the Grafana datasource, as a labelled ConfigMap
 dashboards/energy.json   Grafana dashboard, shipped as a labelled ConfigMap
 docs/architecture.md     Why it is built this way
 ```
@@ -31,21 +32,22 @@ known build and a rollback is just a checkout.
 
 ```sh
 cp .env.example .env && $EDITOR .env   # your price per kWh; gitignored
-make install     # build + push the image, apply everything, load the dashboard
+make install     # build + push the image, apply everything
 make verify      # devices answering, scrape target up, rules loaded
-make datasource  # prints the one thing this repo cannot apply for you
 ```
 
-`make install` covers everything in-cluster, including the dashboard: Grafana's
-sidecar picks up any ConfigMap labelled `grafana_dashboard=1`, so no API token
-and no manual import.
+`make install` covers everything, including both halves of the Grafana side.
+The dashboard and the datasource each ship as a ConfigMap carrying a label
+Grafana's sidecars watch for — `grafana_dashboard=1` and
+`grafana_datasource=1` — picked up from this namespace without an API token, a
+manual import, or a line of energy configuration anywhere else. The dashboard
+defaults to the uid `energy-prometheus`, so there is nothing to select either.
 
-The **datasource** is the single one-time step outside this repo. Grafana
-file-provisions datasources from
-`k3s-gameservers/infrastructure/monitoring/config/datasources.yaml`, so add the
-four lines `make datasource` prints and re-run that kustomization. The
-dashboard defaults to the uid `energy-prometheus`, so once it exists there is
-nothing to select.
+The one **prerequisite** is that Grafana runs a datasource sidecar as well as a
+dashboard one. On this cluster it does, from
+`k3s-gameservers/infrastructure/monitoring/grafana.yaml`. Without it, nothing
+reads `manifests/datasource.yaml` and the dashboard comes up with no data; add
+the datasource there by hand in that case, or add the sidecar.
 
 If your shell is not already pointed at a readable kubeconfig — k3s's own is
 root-only, though `~/.kube/config` on the host works:

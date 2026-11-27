@@ -31,7 +31,7 @@ help:
 	@echo "make install             push-image + deploy -- the from-scratch path"
 	@echo "make build-image         podman build the exporter image"
 	@echo "make push-image          push it to $(REGISTRY)"
-	@echo "make deploy              apply namespace, tariff, rules, devices, exporter, Prometheus, dashboard"
+	@echo "make deploy              apply namespace, tariff, rules, devices, exporter, Prometheus, dashboard, datasource"
 	@echo "make verify              exporter reachable, Prometheus target up, rules loaded"
 	@echo "make status              pods/pvc/svc in the $(NAMESPACE) namespace"
 	@echo "make logs                tail the exporter"
@@ -47,7 +47,7 @@ help:
 	@echo "make set-name HOST=<ip> CH=<n> NAME=\"Freezer\"   name a socket on the device itself"
 	@echo "make clear-name HOST=<ip> CH=<n>   clear it again"
 	@echo "make dashboards          hand dashboards/*.json to Grafana's sidecar as a ConfigMap"
-	@echo "make datasource          print the Grafana datasource to add, once"
+	@echo "make datasource          hand the Energy datasource to Grafana's sidecar as a ConfigMap"
 	@echo "make port-forward        open the energy Prometheus UI on :9091"
 	@echo "make print-scrape-config scrape job to paste elsewhere, if you drop this Prometheus"
 	@echo "make uninstall           delete the namespace (this deletes the energy history)"
@@ -57,7 +57,6 @@ help:
 install: push-image deploy
 	@echo
 	@echo "Deployed. Check it with: make verify"
-	@echo "If this is the first install, add the Grafana datasource: make datasource"
 
 build-image:
 	podman build -t $(IMAGE) $(EXPORTER_DIR)
@@ -106,6 +105,7 @@ deploy: tariff-secret
 		| sha256sum | cut -c1-16)|" \
 		manifests/prometheus.yaml | $(KUBECTL) apply -f -
 	@$(MAKE) --no-print-directory dashboards KUBECTL="$(KUBECTL)"
+	@$(MAKE) --no-print-directory datasource KUBECTL="$(KUBECTL)"
 	$(KUBECTL) -n $(NAMESPACE) rollout status deploy/shelly-exporter --timeout=120s
 	$(KUBECTL) -n $(NAMESPACE) rollout status deploy/energy-prometheus --timeout=180s
 
@@ -231,15 +231,11 @@ toggle:
 # in the k3s-gameservers repo, so this one addition is not something this repo
 # can apply for you. It is a one-time, four-line change; the dashboard defaults
 # to the uid below.
+# Same mechanism as the dashboard: a labelled ConfigMap, picked up from any
+# namespace. Grafana's datasource sidecar writes the file and calls the
+# provisioning reload API, so this needs no restart and no API token.
 datasource:
-	@echo "Add this to k3s-gameservers/infrastructure/monitoring/config/datasources.yaml"
-	@echo "and re-run that kustomization (or add it once in the Grafana UI):"
-	@echo
-	@echo "  - name: Energy"
-	@echo "    type: prometheus"
-	@echo "    uid: energy-prometheus"
-	@echo "    access: proxy"
-	@echo "    url: http://energy-prometheus.$(NAMESPACE).svc:9090"
+	$(KUBECTL) apply -f manifests/datasource.yaml
 
 # Grafana runs the kiwigrid sidecar, which loads any ConfigMap labelled
 # grafana_dashboard=1 from any namespace and files it under the folder named in

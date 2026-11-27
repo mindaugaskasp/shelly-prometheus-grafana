@@ -74,11 +74,18 @@ the folder named in the `grafana_folder` annotation. `make dashboards` builds
 exactly that ConfigMap from `dashboards/*.json`, so the dashboard arrives
 declaratively and survives a rebuild.
 
-**The datasource** does need a one-time addition there, because datasources are
-file-provisioned rather than watched: four lines in
-`infrastructure/monitoring/config/datasources.yaml`, printed by
-`make datasource`. The dashboard defaults to the uid `energy-prometheus`, so
-once it exists nothing else has to be selected.
+**The datasource** arrives the same way, from `manifests/datasource.yaml`
+labelled `grafana_datasource=1`. That took a change to the platform repo,
+because Grafana there originally mounted a single file-provisioned ConfigMap
+of datasources — so every new datasource meant editing a file owned by the
+gameservers repo, and energy configuration leaked into a repo with no reason to
+know about it. Grafana now fills that directory from labelled ConfigMaps
+instead, with an init container for cold start and a watcher that POSTs to the
+provisioning reload API so a datasource added later needs no restart. Its own
+datasources go through the same mechanism, with no special case.
+
+The dashboard defaults to the uid `energy-prometheus`, so nothing has to be
+selected once it exists.
 
 Note that the prometheus-operator CRDs are installed on this cluster but no
 operator is running, so a `ServiceMonitor` would be silently ignored. Scrape

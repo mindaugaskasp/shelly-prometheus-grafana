@@ -1,0 +1,30 @@
+# The Energy datasource, shipped from this repo.
+#
+# Grafana's datasource sidecar loads any ConfigMap labelled
+# grafana_datasource=1 from any namespace, exactly as the dashboard sidecar
+# does for grafana_dashboard=1. So nothing about energy has to be written into
+# the cluster's monitoring kustomization: this repo owns its datasource, its
+# dashboard and its Prometheus, and the platform repo owns Grafana.
+#
+# The data key becomes the filename in Grafana's provisioning directory, so it
+# has to be unique across every repo that ships a datasource.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: energy-datasource
+  namespace: energy
+  labels:
+    grafana_datasource: "1"
+data:
+  energy-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Energy
+        type: prometheus
+        uid: energy-prometheus
+        access: proxy
+        url: http://energy-prometheus.energy.svc:9090
+        jsonData:
+          # Matches the scrape interval, so $__rate_interval comes out right
+          # instead of defaulting to Grafana's assumed 15s.
+          timeInterval: 15s
