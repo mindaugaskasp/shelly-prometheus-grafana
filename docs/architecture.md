@@ -125,10 +125,22 @@ else's business, and it follows the same pattern as
 
 ## Where channel names come from
 
-A name set on the device wins over `devices.yaml`. The point is that a socket
-should be labelled once, in the place you are already looking at when you plug
-something in — the Shelly app — and have the graphs follow. `make set-name`
-writes the same field, so it can be done from the repo instead.
+A name set on the device wins over `devices.yaml`, and `make sync-names` keeps
+the two in step by writing this repo's names onto the devices.
+
+The original intent was the opposite: label a socket in the Shelly app, where
+you are already standing when you plug something in, and let the graphs follow.
+That turns out to be impossible. The app's names are held in the Shelly Cloud
+account, not on the device. `Sys.GetConfig`, `Switch.GetConfig`,
+`Shelly.GetDeviceInfo`, `KVS.List` and `Group.GetConfig` were all checked on
+all four devices, and every local naming field reads back `null` or is absent
+— while the switch status reports `source: "SHC"`, the cloud. Reading those
+names would mean an authenticated call to an undocumented Cloud endpoint, which
+is the dependency this setup exists to avoid.
+
+So `devices.yaml` is the source of truth and `sync-names` pushes it down. The
+name ends up local, which is also why it then shows in the app and survives a
+cloud outage or an account change.
 
 The trade-off is deliberate: the `name` label is display, not identity.
 Renaming a socket ends one series and starts another, so a query that must

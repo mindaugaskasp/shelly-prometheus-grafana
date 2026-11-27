@@ -78,20 +78,26 @@ A plug has only `switch:0`; the Power Strip 4 Gen4 has `switch:0` through
 
 ## Naming sockets
 
-The label on the graphs comes from the name set **on the device**, which is
-also the name the Shelly app shows. Set it once and it follows the socket
-everywhere:
+Names live in `devices.yaml`, and `make sync-names` writes them onto the
+devices themselves:
 
 ```sh
-make names                                                   # what they call themselves now
-make set-name HOST=192.168.0.128 CH=1 NAME="Freezer"         # name a socket
-make clear-name HOST=192.168.0.128 CH=1                      # hand it back to devices.yaml
-make toggle HOST=192.168.0.128 CH=1                          # which socket IS this?
+make sync-names DRY=1                  # what it would change
+make sync-names                        # write it
+make names                             # what the devices call themselves now
+make toggle HOST=192.168.0.128 CH=1    # which socket IS this?
 ```
 
-Precedence is: the device's own name, then the `channels:` fallback in
-`devices.yaml`, then `<device>-<switch id>`. Renaming shows up within
-`META_TTL_MS` (5 minutes).
+The names you set in the **Shelly app are not on the hardware** -- they live in
+your Shelly Cloud account, and every local naming field on a factory device
+reads back `null`. The app therefore cannot be the source of truth here; this
+repo is, and `sync-names` makes the devices agree with it. The name then shows
+in the app as well, and survives a cloud outage or an account change.
+
+Precedence in the exporter is: the device's own name, then the `channels:`
+entry in `devices.yaml`, then `<device>-<switch id>`. A rename shows up within
+`META_TTL_MS` (5 minutes). `make set-name` and `make clear-name` write one
+socket at a time, for trying a name without editing the file.
 
 One caveat: the `name` label is for reading, not for joining on. A rename
 starts a new series under the new name, so anything that has to survive one

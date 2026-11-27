@@ -8,11 +8,14 @@
 # the comment on each entry so a lease can be pinned without re-scanning;
 # `make discover` re-finds everything if they do move.
 #
-# `channels` is a FALLBACK label per switch component id. A name set on the
-# device itself -- in the Shelly app, or with
-# `make set-name HOST=... CH=... NAME="Freezer"` -- wins over it, so the usual
-# way to label a socket is to name it on the device and leave this alone.
-# `make names` shows what each device currently calls itself and its outputs.
+# `name` is identity: it becomes the `device` label and queries group by it,
+# so it stays short and stable. `channels` is display: one label per switch
+# component id, which is what you read on the graphs.
+#
+# A name set on the device itself wins over `channels`, and `make sync-names`
+# writes everything here onto the devices so the two agree -- the Shelly app
+# then shows the same names these graphs do. `make names` prints what each
+# device currently calls itself and its outputs.
 #
 # A plug has only switch:0; the Power Strip 4 Gen4 has switch:0 through
 # switch:3, one per socket.
@@ -22,32 +25,33 @@ defaults:
 
 devices:
   # Shelly Plug S MTR Gen3 -- model S3PL-30110EU, MAC 08:3A:F2:D9:22:10
-  - name: plug-a
+  # The k3s host, so it measures the machine drawing these graphs.
+  - name: server-pc
     host: 192.168.0.21
     channels:
-      0: plug-a
+      0: Server PC
 
   # Shelly Plug S MTR Gen3 -- model S3PL-30110EU, MAC 08:3A:F2:D8:E0:6C
-  - name: plug-b
+  - name: 3d-printer
     host: 192.168.0.66
     channels:
-      0: plug-b
+      0: 3D printer
 
   # Shelly 1PM Mini Gen3 -- model S3SW-001P8EU, MAC 54:32:04:6B:8A:40
-  # Lowest signal of the four (-77 dBm), so it is the one that will time out.
-  - name: mini-1pm
+  # Wired in behind the switch, not a plug. Lowest signal of the four
+  # (-79 dBm), so it is the one that will time out.
+  - name: terrace-lights
     host: 192.168.0.93
     channels:
-      0: mini-1pm
+      0: Terrace lights
 
   # Shelly Power Strip 4 Gen4 -- model S4PL-00416EU, MAC E8:F6:0A:63:8D:68
-  # Four independently metered sockets. Which physical socket is which switch
-  # id is worth confirming once with `make toggle DEVICE=... CH=...`; the
-  # mapping below assumes switch:0 is the socket nearest the cable.
-  - name: power-strip
+  # Four independently metered sockets, at the desk. switch:0 is unused;
+  # rename it here when something goes into it.
+  - name: pc-strip
     host: 192.168.0.128
     channels:
-      0: strip-socket-1
-      1: strip-socket-2
-      2: strip-socket-3
-      3: strip-socket-4
+      0: Spare socket
+      1: PC
+      2: Acer monitor
+      3: Dell monitor
