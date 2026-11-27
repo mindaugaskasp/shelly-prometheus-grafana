@@ -37,7 +37,8 @@ help:
 	@echo "make logs                tail the exporter"
 	@echo "make metrics             dump the exporter's current /metrics"
 	@echo "make targets             what this Prometheus thinks of its scrape target"
-	@echo "make reload              re-read prometheus.yml and the rules without a restart"
+	@echo "make reload              re-read config without a restart; deploy already rolls the pod,"
+	@echo "                         and a reload too soon after an apply re-reads the old file"
 	@echo "make discover            sweep $(SUBNET).0/24 for Shelly devices and their models"
 	@echo "make probe HOST=<ip>     raw Shelly.GetStatus from one device"
 	@echo "make toggle HOST=<ip> CH=<n>   flip one channel, to work out which socket is which"
@@ -100,7 +101,9 @@ deploy: tariff-secret
 		-e "s|__TARIFF_CHECKSUM__|$$(sha256sum $(ENV_FILE) | cut -c1-16)|" \
 		-e "s|__IMAGE__|$(IMAGE)|" \
 		manifests/exporter.yaml | $(KUBECTL) apply -f -
-	$(KUBECTL) apply -f manifests/prometheus.yaml
+	sed -e "s|__CONFIG_CHECKSUM__|$$(cat manifests/prometheus.yaml manifests/rules.yaml \
+		| sha256sum | cut -c1-16)|" \
+		manifests/prometheus.yaml | $(KUBECTL) apply -f -
 	@$(MAKE) --no-print-directory dashboards KUBECTL="$(KUBECTL)"
 	$(KUBECTL) -n $(NAMESPACE) rollout status deploy/shelly-exporter --timeout=120s
 	$(KUBECTL) -n $(NAMESPACE) rollout status deploy/energy-prometheus --timeout=180s

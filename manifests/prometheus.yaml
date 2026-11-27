@@ -54,6 +54,13 @@ spec:
     metadata:
       labels:
         app: energy-prometheus
+      annotations:
+        # Rolls the pod when the scrape config or the rules change. Applying
+        # the ConfigMap and then hitting /-/reload looks equivalent and is
+        # not: the kubelet can take a minute to refresh the mounted file, so
+        # the reload re-reads the old config and the change silently does
+        # nothing.
+        checksum/config: "__CONFIG_CHECKSUM__"
     spec:
       # Numeric UIDs rather than "nobody": runc on this host fails to resolve
       # symbolic usernames against nsswitch's systemd passwd source.
