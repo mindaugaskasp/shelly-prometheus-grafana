@@ -523,7 +523,7 @@
       "id": 6,
       "type": "timeseries",
       "title": "Cost per day: this period against the one before",
-      "description": "The previous window is shifted forward onto the same axis, so the two lines sit day against day. Days are UTC, not local.",
+      "description": "The previous window is shifted forward onto the same axis, so the two lines sit day against day. Days are UTC, not local. A 1-day step lands on UTC midnight, so this stays empty until the first complete UTC day of history has passed.",
       "datasource": {
         "type": "prometheus",
         "uid": "${ds}"
@@ -621,7 +621,7 @@
       "id": 7,
       "type": "timeseries",
       "title": "kWh per day, by channel",
-      "description": "Stacked, so the top of the stack is the whole selection. Days are UTC.",
+      "description": "Stacked, so the top of the stack is the whole selection. Days are UTC. A 1-day step lands on UTC midnight, so this stays empty until the first complete UTC day of history has passed.",
       "datasource": {
         "type": "prometheus",
         "uid": "${ds}"
