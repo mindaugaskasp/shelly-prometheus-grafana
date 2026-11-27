@@ -24,7 +24,7 @@ SUBNET ?= 192.168.0
 
 .PHONY: help install deploy build-image push-image devices-configmap \
 	tariff-secret status logs metrics targets reload verify discover probe \
-	toggle names set-name clear-name dashboards datasource port-forward \
+	toggle names sync-names set-name clear-name dashboards datasource port-forward \
 	print-scrape-config uninstall
 
 help:
@@ -43,6 +43,7 @@ help:
 	@echo "make probe HOST=<ip>     raw Shelly.GetStatus from one device"
 	@echo "make toggle HOST=<ip> CH=<n>   flip one channel, to work out which socket is which"
 	@echo "make names               what each device calls itself and its sockets"
+	@echo "make sync-names [DRY=1]  write the names in $(DEVICES) onto the devices"
 	@echo "make set-name HOST=<ip> CH=<n> NAME=\"Freezer\"   name a socket on the device itself"
 	@echo "make clear-name HOST=<ip> CH=<n>   clear it again"
 	@echo "make dashboards          hand dashboards/*.json to Grafana's sidecar as a ConfigMap"
@@ -176,8 +177,14 @@ names:
 		done; \
 	done
 
-# Names the output on the device itself, so the Shelly app and Grafana agree
-# and devices.yaml needs no channels: entry at all.
+# Writes every name in devices.yaml onto the devices. The names set in the
+# Shelly app live in your Shelly Cloud account, not on the hardware, so this is
+# what makes a name local -- and local is what the exporter, the app and a
+# rebuilt cluster all read. Re-runnable; DRY=1 shows what it would change.
+sync-names:
+	@python3 scripts/sync-names.py $(DEVICES) $(if $(DRY),--dry-run,)
+
+# Names a single output on the device itself.
 set-name: export SHELLY_NAME = $(NAME)
 set-name: export SHELLY_CH = $(CH)
 set-name:
