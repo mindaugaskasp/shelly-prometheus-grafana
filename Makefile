@@ -110,7 +110,7 @@ reload:
 verify:
 	@echo "--- devices ---"
 	@$(KUBECTL) -n $(NAMESPACE) exec deploy/shelly-exporter -- \
-		wget -qO- http://127.0.0.1:9102/metrics | grep -E '^shelly_(up|price_up)'
+		wget -qO- http://127.0.0.1:9102/metrics | grep -E '^shelly_up\{|^shelly_price_up '
 	@echo "--- scrape target ---"
 	@$(KUBECTL) -n $(NAMESPACE) exec deploy/energy-prometheus -- \
 		wget -qO- 'http://127.0.0.1:9090/api/v1/targets?state=active' \
