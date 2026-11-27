@@ -16,14 +16,32 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 4000);
 // which is the device default.
 const SHELLY_PASSWORD = process.env.SHELLY_PASSWORD || '';
 
+// "flat" -- you pay a fixed price per kWh, and that is what cost is computed
+// with. PRICE_FLAT_EUR_PER_KWH is taken exactly as entered, VAT included, so
+// it matches the figure on the bill with no arithmetic in between.
+// "spot" -- you pay the day-ahead market price, and cost is
+// (spot + PRICE_FIXED_EUR_PER_KWH) * (1 + PRICE_VAT_RATE).
+// The market price is fetched in both modes unless PRICE_ENABLED=0, so a flat
+// tariff can still be compared against what the market was doing.
+const PRICE_MODE = (process.env.PRICE_MODE || 'spot').toLowerCase();
+const PRICE_FLAT = Number(process.env.PRICE_FLAT_EUR_PER_KWH || 0);
 const PRICE_ENABLED = process.env.PRICE_ENABLED !== '0';
 const PRICE_ZONE = (process.env.PRICE_ZONE || 'lt').toLowerCase();
 const PRICE_URL = process.env.PRICE_URL || 'https://dashboard.elering.ee/api/nps/price';
-// Everything that is not the spot price: distribution, supplier margin,
-// excise. EUR per kWh, excluding VAT.
+// Spot mode only: everything that is not the market price -- distribution,
+// supplier margin, excise. EUR per kWh, excluding VAT.
 const PRICE_FIXED = Number(process.env.PRICE_FIXED_EUR_PER_KWH || 0);
 const PRICE_VAT = Number(process.env.PRICE_VAT_RATE || 0);
 const PRICE_REFRESH_MS = Number(process.env.PRICE_REFRESH_MS || 15 * 60 * 1000);
+
+if (PRICE_MODE !== 'flat' && PRICE_MODE !== 'spot') {
+  console.error(`PRICE_MODE must be "flat" or "spot", got "${PRICE_MODE}"`);
+  process.exit(1);
+}
+if (PRICE_MODE === 'flat' && !(PRICE_FLAT > 0)) {
+  console.error('PRICE_MODE=flat needs PRICE_FLAT_EUR_PER_KWH set to your price per kWh');
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------- devices
 
@@ -105,23 +123,45 @@ async function rpc(device, path) {
 
 const getStatus = (device) => rpc(device, '/rpc/Shelly.GetStatus');
 
-// Model, generation and firmware come from /shelly, not from GetStatus. They
-// change only on a firmware update, so they are cached rather than fetched
-// on every scrape.
-const INFO_TTL_MS = 60 * 60 * 1000;
-const infoCache = new Map();
+// Two things GetStatus does not carry: model/generation/firmware (from
+// /shelly) and the names given to the device and each of its outputs (from
+// Shelly.GetConfig). Neither changes often, so both are cached -- but with a
+// short TTL, so renaming a socket in the Shelly app shows up on the graphs
+// within minutes rather than at the next restart.
+const META_TTL_MS = Number(process.env.META_TTL_MS || 5 * 60 * 1000);
+const metaCache = new Map();
 
-async function getInfo(device) {
-  const cached = infoCache.get(device.name);
-  if (cached && Date.now() - cached.at < INFO_TTL_MS) return cached.info;
+async function getMeta(device) {
+  const cached = metaCache.get(device.name);
+  if (cached && Date.now() - cached.at < META_TTL_MS) return cached.meta;
   try {
-    const info = await rpc(device, '/shelly');
-    infoCache.set(device.name, { at: Date.now(), info });
-    return info;
+    const [info, config] = await Promise.all([
+      rpc(device, '/shelly'),
+      rpc(device, '/rpc/Shelly.GetConfig'),
+    ]);
+    const meta = { info, config };
+    metaCache.set(device.name, { at: Date.now(), meta });
+    return meta;
   } catch (err) {
-    console.error(`${device.name}: /shelly failed: ${err.message}`);
-    return cached ? cached.info : null;
+    console.error(`${device.name}: metadata fetch failed: ${err.message}`);
+    return cached ? cached.meta : { info: null, config: null };
   }
+}
+
+// The name on the graphs, in precedence order:
+//   1. the name set on the device itself, in the Shelly app or `make set-name`
+//   2. the channels: mapping in devices.yaml
+//   3. "<device>-<switch id>"
+//
+// Letting the device win means a socket is labelled in one place and the
+// label follows it everywhere. The trade-off is that renaming starts a new
+// series for the `name` label: `device` and `channel` are the stable identity,
+// so group by those for anything that has to survive a rename.
+function channelName(device, config, id) {
+  const configured = config && config[`switch:${id}`] && config[`switch:${id}`].name;
+  if (configured) return configured;
+  if (device.channels && device.channels[id]) return device.channels[id];
+  return `${device.name}-${id}`;
 }
 
 // ------------------------------------------------------------ price feed
@@ -204,7 +244,9 @@ class Metrics {
   }
 }
 
-function collectDevice(m, device, status, info, ok, durationS, errMsg) {
+function collectDevice(m, device, status, meta, ok, durationS, errMsg) {
+  const info = meta && meta.info;
+  const config = meta && meta.config;
   const base = { device: device.name };
   m.add('shelly_up', 'gauge', 'Whether the last scrape of this device succeeded.', base, ok ? 1 : 0);
   m.add(
@@ -227,6 +269,9 @@ function collectDevice(m, device, status, info, ok, durationS, errMsg) {
       gen: info ? info.gen : '',
       app: info ? info.app : '',
       firmware: info ? info.ver : '',
+      // Empty until the device is given a name, in the Shelly app or with
+      // `make set-name`.
+      device_name: config && config.sys && config.sys.device ? config.sys.device.name : '',
     },
     1,
   );
@@ -259,11 +304,7 @@ function collectDevice(m, device, status, info, ok, durationS, errMsg) {
     const match = /^switch:(\d+)$/.exec(key);
     if (!match) continue;
     const id = match[1];
-    const labels = {
-      ...base,
-      channel: id,
-      name: (device.channels && device.channels[id]) || `${device.name}-${id}`,
-    };
+    const labels = { ...base, channel: id, name: channelName(device, config, id) };
 
     m.add('shelly_power_watts', 'gauge', 'Instantaneous active power.', labels, sw.apower);
     m.add('shelly_voltage_volts', 'gauge', 'Measured voltage.', labels, sw.voltage);
@@ -328,15 +369,32 @@ function collectPrice(m) {
     );
   }
 
-  const spot = PRICE_ENABLED ? price.spot : 0;
-  const total = (spot + PRICE_FIXED) * (1 + PRICE_VAT);
+  // "total" is the one the cost rules multiply by; the others are there to be
+  // looked at. In flat mode that is the tariff as entered, untouched.
+  const spot = PRICE_ENABLED && price.updated ? price.spot : null;
+  const total = PRICE_MODE === 'flat'
+    ? PRICE_FLAT
+    : ((spot || 0) + PRICE_FIXED) * (1 + PRICE_VAT);
+
   m.add(
     'shelly_price_eur_per_kwh', 'gauge',
-    'Electricity price per kWh. "spot" is the raw day-ahead market price, "fixed" is distribution plus supplier margin and excise, "total" is both with VAT applied.',
-    { ...zone, component: 'spot' }, spot,
+    'Electricity price per kWh. "total" is what consumption is costed at; "flat" is the contracted tariff; "spot" is the day-ahead market price; "fixed" is the non-market component used in spot mode.',
+    { ...zone, component: 'total' }, total,
   );
-  m.add('shelly_price_eur_per_kwh', 'gauge', '', { ...zone, component: 'fixed' }, PRICE_FIXED);
-  m.add('shelly_price_eur_per_kwh', 'gauge', '', { ...zone, component: 'total' }, total);
+  if (PRICE_FLAT > 0) {
+    m.add('shelly_price_eur_per_kwh', 'gauge', '', { ...zone, component: 'flat' }, PRICE_FLAT);
+  }
+  if (spot !== null) {
+    m.add('shelly_price_eur_per_kwh', 'gauge', '', { ...zone, component: 'spot' }, spot);
+  }
+  if (PRICE_MODE === 'spot') {
+    m.add('shelly_price_eur_per_kwh', 'gauge', '', { ...zone, component: 'fixed' }, PRICE_FIXED);
+  }
+  m.add(
+    'shelly_price_mode', 'gauge',
+    'Which pricing mode cost is being computed in; the value is always 1.',
+    { mode: PRICE_MODE }, 1,
+  );
 }
 
 // ----------------------------------------------------------------- server
@@ -353,7 +411,7 @@ async function scrapeAll() {
       try {
         const status = await getStatus(device);
         const durationS = Number(process.hrtime.bigint() - started) / 1e9;
-        collectDevice(m, device, status, await getInfo(device), true, durationS);
+        collectDevice(m, device, status, await getMeta(device), true, durationS);
       } catch (err) {
         const durationS = Number(process.hrtime.bigint() - started) / 1e9;
         scrapeErrors += 1;

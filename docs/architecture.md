@@ -74,11 +74,18 @@ the folder named in the `grafana_folder` annotation. `make dashboards` builds
 exactly that ConfigMap from `dashboards/*.json`, so the dashboard arrives
 declaratively and survives a rebuild.
 
-**The datasource** does need a one-time addition there, because datasources are
-file-provisioned rather than watched: four lines in
-`infrastructure/monitoring/config/datasources.yaml`, printed by
-`make datasource`. The dashboard defaults to the uid `energy-prometheus`, so
-once it exists nothing else has to be selected.
+**The datasource** arrives the same way, from `manifests/datasource.yaml`
+labelled `grafana_datasource=1`. That took a change to the platform repo,
+because Grafana there originally mounted a single file-provisioned ConfigMap
+of datasources — so every new datasource meant editing a file owned by the
+gameservers repo, and energy configuration leaked into a repo with no reason to
+know about it. Grafana now fills that directory from labelled ConfigMaps
+instead, with an init container for cold start and a watcher that POSTs to the
+provisioning reload API so a datasource added later needs no restart. Its own
+datasources go through the same mechanism, with no special case.
+
+The dashboard defaults to the uid `energy-prometheus`, so nothing has to be
+selected once it exists.
 
 Note that the prometheus-operator CRDs are installed on this cluster but no
 operator is running, so a `ServiceMonitor` would be silently ignored. Scrape
@@ -112,9 +119,50 @@ prices are published a day in advance — a transient outage should not punch a
 hole in cost accounting. `shelly_price_up` and `shelly_price_age_seconds` are
 what to look at if the figures stop moving.
 
-Setting `PRICE_ENABLED: "0"` turns the feed off and makes
-`PRICE_FIXED_EUR_PER_KWH` the whole tariff, so a flat-rate setup is a ConfigMap
-change rather than a different code path.
+On a flat tariff (`PRICE_MODE=flat`) the contracted price is what cost is
+computed from, used exactly as entered — no VAT arithmetic, so it matches the
+bill. The market price is still fetched and exposed as a separate component, on
+the grounds that the interesting question about a fixed deal is whether it is
+beating spot. Both end up on the same panel.
+
+The tariff comes from a gitignored `.env` and reaches the pod as a Secret
+rather than a committed ConfigMap. It is not really a secret, but it is nobody
+else's business, and it follows the same pattern as
+`k3s-gameservers/infrastructure/site.env`.
+
+## Where channel names come from
+
+A name set on the device wins over `devices.yaml`, and `make sync-names` keeps
+the two in step by writing this repo's names onto the devices.
+
+The original intent was the opposite: label a socket in the Shelly app, where
+you are already standing when you plug something in, and let the graphs follow.
+That turns out to be impossible. The app's names are held in the Shelly Cloud
+account, not on the device. `Sys.GetConfig`, `Switch.GetConfig`,
+`Shelly.GetDeviceInfo`, `KVS.List` and `Group.GetConfig` were all checked on
+all four devices, and every local naming field reads back `null` or is absent
+— while the switch status reports `source: "SHC"`, the cloud. Reading those
+names would mean an authenticated call to an undocumented Cloud endpoint, which
+is the dependency this setup exists to avoid.
+
+So `devices.yaml` is the source of truth and `sync-names` pushes it down. The
+name ends up local, which is also why it then shows in the app and survives a
+cloud outage or an account change.
+
+The trade-off is deliberate: the `name` label is display, not identity.
+Renaming a socket ends one series and starts another, so a query that must
+survive a rename groups by `device` and `channel`, which are stable. Cost and
+energy totals per socket are the ones to watch for this.
+
+Two firmware details, both found the hard way:
+
+- `Switch.SetConfig` must be **POSTed** as a JSON-RPC body. Passing `config=`
+  in the query string works until the name contains an escaped quote, at which
+  point the firmware's parser fails with a misleading
+  `Missing required argument 'id'`.
+- Names are free text, so they reach Prometheus as label values and are
+  escaped accordingly. `promtool check metrics` on the exporter's output with
+  a name containing `"` and `\` passes.
 
 ## Host state not in this repo
 

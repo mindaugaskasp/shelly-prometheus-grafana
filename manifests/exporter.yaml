@@ -19,9 +19,10 @@ spec:
       labels:
         app: shelly-exporter
       annotations:
-        # Rolls the pod when devices.yaml changes, since a mounted ConfigMap
-        # is only re-read at startup.
+        # Rolls the pod when devices.yaml or the tariff changes: a mounted
+        # ConfigMap is only re-read at startup, and envFrom never re-reads.
         checksum/devices: "__DEVICES_CHECKSUM__"
+        checksum/tariff: "__TARIFF_CHECKSUM__"
     spec:
       securityContext:
         runAsUser: 1000
@@ -35,7 +36,8 @@ spec:
             - name: http
               containerPort: 9102
           envFrom:
-            - configMapRef:
+            # Built from the gitignored .env by `make deploy`.
+            - secretRef:
                 name: shelly-tariff
           env:
             # Only needed once the devices have auth enabled; the Secret is

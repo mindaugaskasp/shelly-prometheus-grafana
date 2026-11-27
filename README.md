@@ -12,12 +12,13 @@ A rebuilt cluster is one `make install` away from where it was.
 devices.yaml             Device inventory -- the one file you normally edit
 Makefile                 install, verify, discover, dashboards
 exporter/                Node exporter: Shelly RPC -> Prometheus text
+.env.example             Copy to .env (gitignored) -- your price per kWh
 manifests/
   namespace.yaml           the energy namespace
-  tariff.yaml              price zone, fixed charges, VAT
   exporter.yaml            exporter Deployment + Service
   prometheus.yaml          dedicated Prometheus, 3y retention
   rules.yaml               energy and cost recording rules
+  datasource.yaml          the Grafana datasource, as a labelled ConfigMap
 dashboards/energy.json   Grafana dashboard, shipped as a labelled ConfigMap
 docs/architecture.md     Why it is built this way
 ```
@@ -30,21 +31,23 @@ box is delivered. The image tag is the commit, so `make deploy` always runs a
 known build and a rollback is just a checkout.
 
 ```sh
-make install     # build + import the image, apply everything, load the dashboard
+cp .env.example .env && $EDITOR .env   # your price per kWh; gitignored
+make install     # build + push the image, apply everything
 make verify      # devices answering, scrape target up, rules loaded
-make datasource  # prints the one thing this repo cannot apply for you
 ```
 
-`make install` covers everything in-cluster, including the dashboard: Grafana's
-sidecar picks up any ConfigMap labelled `grafana_dashboard=1`, so no API token
-and no manual import.
+`make install` covers everything, including both halves of the Grafana side.
+The dashboard and the datasource each ship as a ConfigMap carrying a label
+Grafana's sidecars watch for — `grafana_dashboard=1` and
+`grafana_datasource=1` — picked up from this namespace without an API token, a
+manual import, or a line of energy configuration anywhere else. The dashboard
+defaults to the uid `energy-prometheus`, so there is nothing to select either.
 
-The **datasource** is the single one-time step outside this repo. Grafana
-file-provisions datasources from
-`k3s-gameservers/infrastructure/monitoring/config/datasources.yaml`, so add the
-four lines `make datasource` prints and re-run that kustomization. The
-dashboard defaults to the uid `energy-prometheus`, so once it exists there is
-nothing to select.
+The one **prerequisite** is that Grafana runs a datasource sidecar as well as a
+dashboard one. On this cluster it does, from
+`k3s-gameservers/infrastructure/monitoring/grafana.yaml`. Without it, nothing
+reads `manifests/datasource.yaml` and the dashboard comes up with no data; add
+the datasource there by hand in that case, or add the sidecar.
 
 If your shell is not already pointed at a readable kubeconfig — k3s's own is
 root-only, though `~/.kube/config` on the host works:
@@ -75,24 +78,53 @@ only read at startup.
 A plug has only `switch:0`; the Power Strip 4 Gen4 has `switch:0` through
 `switch:3`, one per socket.
 
+## Naming sockets
+
+Names live in `devices.yaml`, and `make sync-names` writes them onto the
+devices themselves:
+
+```sh
+make sync-names DRY=1                  # what it would change
+make sync-names                        # write it
+make names                             # what the devices call themselves now
+make toggle HOST=192.168.0.128 CH=1    # which socket IS this?
+```
+
+The names you set in the **Shelly app are not on the hardware** -- they live in
+your Shelly Cloud account, and every local naming field on a factory device
+reads back `null`. The app therefore cannot be the source of truth here; this
+repo is, and `sync-names` makes the devices agree with it. The name then shows
+in the app as well, and survives a cloud outage or an account change.
+
+Precedence in the exporter is: the device's own name, then the `channels:`
+entry in `devices.yaml`, then `<device>-<switch id>`. A rename shows up within
+`META_TTL_MS` (5 minutes). `make set-name` and `make clear-name` write one
+socket at a time, for trying a name without editing the file.
+
+One caveat: the `name` label is for reading, not for joining on. A rename
+starts a new series under the new name, so anything that has to survive one
+should group by `device` and `channel`, which never change.
+
 ## Tariff
 
-`manifests/tariff.yaml` holds the price settings, committed on purpose:
+The price lives in `.env`, which is **gitignored** — copy `.env.example` and
+fill it in on the host. `make deploy` turns it into the `shelly-tariff`
+Secret, so the price is on the host and in the cluster but never in the repo.
 
 | Key | Meaning |
 |---|---|
-| `PRICE_ENABLED` | `1` for Nord Pool day-ahead pricing, `0` for a flat tariff |
+| `PRICE_MODE` | `flat` for a contracted price, `spot` for day-ahead market pricing |
+| `PRICE_FLAT_EUR_PER_KWH` | your price per kWh, exactly as the bill states it, VAT included |
+| `PRICE_ENABLED` | `1` fetches the market price too, for comparison; `0` skips the call |
 | `PRICE_ZONE` | `lt`, `lv`, `ee` or `fi` |
-| `PRICE_FIXED_EUR_PER_KWH` | distribution + supplier margin + excise, excluding VAT |
-| `PRICE_VAT_RATE` | e.g. `0.21` |
+| `PRICE_FIXED_EUR_PER_KWH` | spot mode only: distribution + margin + excise, excluding VAT |
+| `PRICE_VAT_RATE` | spot mode only, e.g. `0.21` |
 
-**The committed values are placeholders.** Take the fixed component from your
-supplier's price list, or cost figures will be confidently wrong. For a flat
-tariff set `PRICE_ENABLED: "0"` and put the whole per-kWh price, excluding VAT,
-in `PRICE_FIXED_EUR_PER_KWH`.
-
-Spot prices come from Elering's free Nord Pool API — no key, 15-minute
-resolution, EUR/MWh.
+In `flat` mode `PRICE_FLAT_EUR_PER_KWH` is used exactly as entered — nothing is
+added to it — and it is what cost is computed from. The market price is still
+fetched and graphed beside it, so you can see whether the fixed deal is beating
+spot. Spot prices come from Elering's free Nord Pool API: no key, 15-minute
+resolution.
 
 ## Metrics
 
@@ -110,7 +142,8 @@ Per device: `shelly_up`, `shelly_info`, `shelly_uptime_seconds`,
 `shelly_wifi_rssi_dbm`, `shelly_cloud_connected`, `shelly_mqtt_connected`,
 `shelly_firmware_update_available`, `shelly_scrape_duration_seconds`.
 
-Price: `shelly_price_eur_per_kwh{component="spot"|"fixed"|"total"}`,
+Price: `shelly_price_eur_per_kwh{component="total"|"flat"|"spot"|"fixed"}`
+(`total` is what cost is computed from), `shelly_price_mode`,
 `shelly_price_up`, `shelly_price_age_seconds`.
 
 Recorded every 5 minutes: `shelly:energy_kwh:increase5m`,

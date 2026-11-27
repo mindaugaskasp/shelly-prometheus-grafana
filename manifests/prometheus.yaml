@@ -15,7 +15,12 @@ data:
     rule_files:
       - /etc/prometheus/rules/*.yaml
     scrape_configs:
+      # 15s rather than the 30s default so the live panel reacts at about the
+      # speed a kettle does. It roughly doubles the data to ~400 MB a year,
+      # which the volume absorbs easily, and leaves the 5-minute recording
+      # rules unaffected.
       - job_name: shelly
+        scrape_interval: 15s
         static_configs:
           - targets: ["shelly-exporter.energy.svc.cluster.local:9102"]
 ---
@@ -49,6 +54,13 @@ spec:
     metadata:
       labels:
         app: energy-prometheus
+      annotations:
+        # Rolls the pod when the scrape config or the rules change. Applying
+        # the ConfigMap and then hitting /-/reload looks equivalent and is
+        # not: the kubelet can take a minute to refresh the mounted file, so
+        # the reload re-reads the old config and the change silently does
+        # nothing.
+        checksum/config: "__CONFIG_CHECKSUM__"
     spec:
       # Numeric UIDs rather than "nobody": runc on this host fails to resolve
       # symbolic usernames against nsswitch's systemd passwd source.
