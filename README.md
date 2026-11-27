@@ -24,8 +24,10 @@ docs/architecture.md     Why it is built this way
 
 ## Setup from scratch
 
-Clone on the k3s host — `make import-image` builds with podman and loads
-straight into containerd, so no registry is involved.
+Clone on the k3s host — `make push-image` builds with podman and pushes to the
+in-cluster registry on `localhost:30500`, the same way everything else on that
+box is delivered. The image tag is the commit, so `make deploy` always runs a
+known build and a rollback is just a checkout.
 
 ```sh
 make install     # build + import the image, apply everything, load the dashboard

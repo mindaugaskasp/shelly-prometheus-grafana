@@ -28,7 +28,8 @@ spec:
         runAsGroup: 1000
       containers:
         - name: exporter
-          image: localhost/shelly-prometheus-grafana/shelly-exporter:latest
+          # Substituted by `make deploy` with the registry path and commit tag.
+          image: __IMAGE__
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

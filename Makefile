@@ -4,7 +4,13 @@ SHELL := /bin/bash
 .SHELLFLAGS := -o pipefail -c
 
 NAMESPACE := energy
-IMAGE := shelly-prometheus-grafana/shelly-exporter:latest
+# Built with podman on the cluster host and pushed to the in-cluster registry,
+# the same way everything else on this box is delivered. The tag is the commit,
+# so a rollback is a checkout and a pod never reuses a stale "latest".
+REGISTRY ?= localhost:30500
+IMAGE_REPO := $(REGISTRY)/shelly-prometheus-grafana/shelly-exporter
+TAG ?= $(shell git rev-parse --short HEAD)
+IMAGE := $(IMAGE_REPO):$(TAG)
 EXPORTER_DIR := exporter
 DEVICES := devices.yaml
 
@@ -16,14 +22,14 @@ KUBECTL ?= kubectl
 # Subnet that `make discover` sweeps for devices.
 SUBNET ?= 192.168.0
 
-.PHONY: help install deploy build-image import-image devices-configmap \
+.PHONY: help install deploy build-image push-image devices-configmap \
 	status logs metrics targets reload verify discover probe toggle \
 	dashboards datasource port-forward print-scrape-config uninstall
 
 help:
-	@echo "make install             import-image + deploy -- the from-scratch path"
+	@echo "make install             push-image + deploy -- the from-scratch path"
 	@echo "make build-image         podman build the exporter image"
-	@echo "make import-image        load that image into k3s's containerd (needs sudo)"
+	@echo "make push-image          push it to $(REGISTRY)"
 	@echo "make deploy              apply namespace, tariff, rules, devices, exporter, Prometheus, dashboard"
 	@echo "make verify              exporter reachable, Prometheus target up, rules loaded"
 	@echo "make status              pods/pvc/svc in the $(NAMESPACE) namespace"
@@ -42,7 +48,7 @@ help:
 
 # ------------------------------------------------------------------ deploy
 
-install: import-image deploy
+install: push-image deploy
 	@echo
 	@echo "Deployed. Check it with: make verify"
 	@echo "If this is the first install, add the Grafana datasource: make datasource"
@@ -50,10 +56,9 @@ install: import-image deploy
 build-image:
 	podman build -t $(IMAGE) $(EXPORTER_DIR)
 
-# k3s reads from containerd, not podman's store, so the image is handed over
-# as an OCI archive rather than pushed to a registry.
-import-image: build-image
-	podman save --format oci-archive $(IMAGE) | sudo k3s ctr images import -
+# The registry listens on 127.0.0.1 over plain HTTP, hence --tls-verify=false.
+push-image: build-image
+	podman push --tls-verify=false $(IMAGE)
 
 devices-configmap:
 	@$(KUBECTL) create configmap shelly-devices -n $(NAMESPACE) \
@@ -64,9 +69,15 @@ deploy:
 	$(KUBECTL) apply -f manifests/namespace.yaml
 	$(KUBECTL) apply -f manifests/tariff.yaml -f manifests/rules.yaml
 	@$(MAKE) --no-print-directory devices-configmap KUBECTL="$(KUBECTL)"
+	@# Catches the "deployed a commit whose image was never pushed" case, which
+	@# otherwise only shows up as ImagePullBackOff a minute later.
+	@curl -sf "http://$(REGISTRY)/v2/shelly-prometheus-grafana/shelly-exporter/tags/list" \
+		| grep -q '"$(TAG)"' \
+		|| { echo "image $(IMAGE) is not in the registry -- run: make push-image" >&2; exit 1; }
 	@# A mounted ConfigMap is only read at startup, so the checksum in the pod
 	@# template is what makes a devices.yaml edit actually take effect.
-	sed "s|__DEVICES_CHECKSUM__|$$(sha256sum $(DEVICES) | cut -c1-16)|" \
+	sed -e "s|__DEVICES_CHECKSUM__|$$(sha256sum $(DEVICES) | cut -c1-16)|" \
+		-e "s|__IMAGE__|$(IMAGE)|" \
 		manifests/exporter.yaml | $(KUBECTL) apply -f -
 	$(KUBECTL) apply -f manifests/prometheus.yaml
 	@$(MAKE) --no-print-directory dashboards KUBECTL="$(KUBECTL)"
