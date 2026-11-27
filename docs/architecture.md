@@ -107,6 +107,33 @@ The recording rule's `increase()` window and its group `interval` are both
 what makes `sum_over_time(...[30d])` a true total rather than an estimate.
 Changing one without the other quietly breaks every cost figure.
 
+## Comparing one period with another
+
+Every comparison on the second dashboard is the selected range against
+`offset $__range` -- the window of identical length ending where this one
+begins. That follows whatever range is picked instead of hard-coding a
+period, and it is the only honest option available: PromQL has no calendar,
+so a true "October against November" cannot be written. Equal windows are
+the standard approximation, and the daily bars let a calendar boundary be
+read off by eye.
+
+The totals come from `sum_over_time()` over the recorded 5-minute deltas
+rather than `increase()` over the whole range, for the tiling reason above,
+and so that each slice carries the price that applied to it.
+
+One consequence of renaming a channel shows up here. The `name` label is
+display, not identity, so a range spanning a rename lists the socket twice,
+once under each name. The whole-selection totals stay correct -- the two
+series never overlap in time -- but the per-channel breakdown shows a seam
+until the range no longer reaches back past the rename. Grouping by `device`
+and `channel` avoids it entirely, which is what to do for anything that has
+to survive one.
+
+`min_over_time(shelly_power_watts[range])` is the basis for the standby
+panel: the floor a channel never dropped below, priced for a year. A channel
+that genuinely switches off reads zero, which is the answer wanted rather
+than a gap in the method.
+
 ## Price feed
 
 `https://dashboard.elering.ee/api/nps/price` serves Nord Pool day-ahead prices

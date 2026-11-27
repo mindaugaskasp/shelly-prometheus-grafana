@@ -19,7 +19,9 @@ manifests/
   prometheus.yaml          dedicated Prometheus, 3y retention
   rules.yaml               energy and cost recording rules
   datasource.yaml          the Grafana datasource, as a labelled ConfigMap
-dashboards/energy.json   Grafana dashboard, shipped as a labelled ConfigMap
+dashboards/
+  energy.json              live view: what is drawing power right now
+  comparison.json          this period against the last, per channel
 docs/architecture.md     Why it is built this way
 ```
 
@@ -147,8 +149,42 @@ Price: `shelly_price_eur_per_kwh{component="total"|"flat"|"spot"|"fixed"}`
 `shelly_price_up`, `shelly_price_age_seconds`.
 
 Recorded every 5 minutes: `shelly:energy_kwh:increase5m`,
-`shelly:cost_eur:increase5m`, `shelly:power_watts:sum`, and `:sum` variants of
-the first two.
+`shelly:cost_eur:increase5m`, `shelly:cost_eur_spot:increase5m`,
+`shelly:power_watts:sum`, and `:sum` variants of the three per-channel ones.
+
+`shelly:cost_eur_spot:increase5m` prices the same consumption at the market
+rate rather than your tariff. The difference between the two is what the fixed
+deal is worth, and it has to be recorded as it happens for the same reason
+cost does.
+
+## Comparing periods
+
+The second dashboard answers "is it getting worse" rather than "what is
+happening now". Pick a range and every panel compares it with the window of
+the same length immediately before it -- **Last 30 days** against the 30 days
+before that, **Today** against yesterday -- per channel, in kWh and in euros
+at the prices that applied.
+
+| Panel | |
+|---|---|
+| Cost / energy for the range | and the percentage change against the period before |
+| At this rate, 30 days | the range scaled up, for a quick monthly figure |
+| By channel, before and after | the sortable version: which socket moved and by how much |
+| Cost per day, both periods | the old window shifted onto the same axis, day against day |
+| kWh per day, by channel | stacked daily bars |
+| Where the money went | cost per channel over the range |
+| What never switching off costs | each channel's **lowest** draw in the range, priced for a year |
+| Your fixed deal against the market | what spot would have cost, minus what you paid |
+
+Three things worth knowing about it:
+
+- Comparison is `offset $__range`, not calendar months. PromQL has no concept
+  of a month, so "October against November" is approximated by two equal
+  windows. The daily bars are there to read calendar boundaries off directly.
+- The *before* columns stay blank until there is twice the selected range in
+  history. A 30-day comparison needs 60 days of data.
+- Daily buckets are UTC days, because that is where Prometheus puts a 1-day
+  step. Two hours of a local day land in the neighbouring bar.
 
 ## Useful queries
 
