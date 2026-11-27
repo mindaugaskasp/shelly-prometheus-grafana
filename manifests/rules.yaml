@@ -44,3 +44,15 @@ data:
 
           - record: shelly:cost_eur:increase5m:sum
             expr: sum(shelly:cost_eur:increase5m)
+
+          # What the same five minutes would have cost at the market price.
+          # Recorded for the same reason as cost itself -- the comparison is
+          # only honest at the prices that actually applied -- and it is what
+          # answers whether the fixed deal is worth keeping.
+          - record: shelly:cost_eur_spot:increase5m
+            expr: >-
+              shelly:energy_kwh:increase5m
+              * scalar(shelly_price_eur_per_kwh{component="spot"})
+
+          - record: shelly:cost_eur_spot:increase5m:sum
+            expr: sum(shelly:cost_eur_spot:increase5m)

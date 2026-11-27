@@ -181,13 +181,13 @@
           "color": { "mode": "palette-classic" }
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "plug-a" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
-          { "matcher": { "id": "byName", "options": "plug-b" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
-          { "matcher": { "id": "byName", "options": "mini-1pm" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d55181" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-3" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-4" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#9085e9" } }] }
+          { "matcher": { "id": "byName", "options": "PC" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "Acer monitor" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
+          { "matcher": { "id": "byName", "options": "Dell monitor" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
+          { "matcher": { "id": "byName", "options": "Server PC" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
+          { "matcher": { "id": "byName", "options": "3D printer" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d55181" } }] },
+          { "matcher": { "id": "byName", "options": "Terrace lights" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "Spare socket" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#9085e9" } }] }
         ]
       }
     },
@@ -228,13 +228,13 @@
           }
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "plug-a" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
-          { "matcher": { "id": "byName", "options": "plug-b" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
-          { "matcher": { "id": "byName", "options": "mini-1pm" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d55181" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-3" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-4" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#9085e9" } }] }
+          { "matcher": { "id": "byName", "options": "PC" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "Acer monitor" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
+          { "matcher": { "id": "byName", "options": "Dell monitor" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
+          { "matcher": { "id": "byName", "options": "Server PC" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
+          { "matcher": { "id": "byName", "options": "3D printer" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d55181" } }] },
+          { "matcher": { "id": "byName", "options": "Terrace lights" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "Spare socket" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#9085e9" } }] }
         ]
       }
     },
@@ -315,13 +315,13 @@
           "color": { "mode": "palette-classic" }
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "plug-a" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
-          { "matcher": { "id": "byName", "options": "plug-b" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
-          { "matcher": { "id": "byName", "options": "mini-1pm" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-1" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-2" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d55181" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-3" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
-          { "matcher": { "id": "byName", "options": "strip-socket-4" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#9085e9" } }] }
+          { "matcher": { "id": "byName", "options": "PC" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#3987e5" } }] },
+          { "matcher": { "id": "byName", "options": "Acer monitor" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d95926" } }] },
+          { "matcher": { "id": "byName", "options": "Dell monitor" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#199e70" } }] },
+          { "matcher": { "id": "byName", "options": "Server PC" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#c98500" } }] },
+          { "matcher": { "id": "byName", "options": "3D printer" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#d55181" } }] },
+          { "matcher": { "id": "byName", "options": "Terrace lights" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } }] },
+          { "matcher": { "id": "byName", "options": "Spare socket" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#9085e9" } }] }
         ]
       }
     },
