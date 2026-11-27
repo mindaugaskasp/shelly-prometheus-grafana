@@ -1,0 +1,120 @@
+# A second, dedicated Prometheus, separate from the one in the monitoring
+# namespace. See docs/architecture.md for why: retention is per-instance in
+# Prometheus, not per-job, and energy history has to outlive the 7 days and
+# 1536 MB that are right for right-sizing game pods.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: energy-prometheus-config
+  namespace: energy
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      scrape_timeout: 15s
+    rule_files:
+      - /etc/prometheus/rules/*.yaml
+    scrape_configs:
+      - job_name: shelly
+        static_configs:
+          - targets: ["shelly-exporter.energy.svc.cluster.local:9102"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: energy-prometheus-data
+  namespace: energy
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: energy-prometheus
+  namespace: energy
+  labels:
+    app: energy-prometheus
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: energy-prometheus
+  template:
+    metadata:
+      labels:
+        app: energy-prometheus
+    spec:
+      # Numeric UIDs rather than "nobody": runc on this host fails to resolve
+      # symbolic usernames against nsswitch's systemd passwd source.
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.16.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            # Roughly 110 series at 30s is about 200 MB a year, so three
+            # years fits the volume with room to spare. The size cap is the
+            # backstop that keeps a misconfiguration from filling the host.
+            - --storage.tsdb.retention.time=3y
+            - --storage.tsdb.retention.size=8GB
+            - --web.enable-lifecycle
+          ports:
+            - name: http
+              containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: rules
+              mountPath: /etc/prometheus/rules
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: energy-prometheus-config
+        - name: rules
+          configMap:
+            name: energy-prometheus-rules
+        - name: data
+          persistentVolumeClaim:
+            claimName: energy-prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: energy-prometheus
+  namespace: energy
+  labels:
+    app: energy-prometheus
+spec:
+  # ClusterIP is enough: the only client is the in-cluster Grafana, which
+  # reaches it at http://energy-prometheus.energy.svc:9090. Use
+  # `make port-forward` to open the Prometheus UI yourself.
+  type: ClusterIP
+  selector:
+    app: energy-prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090

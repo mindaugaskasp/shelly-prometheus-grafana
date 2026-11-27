@@ -1,0 +1,48 @@
+# Device inventory -- the only file you edit to add, remove or rename a plug.
+#
+# `make deploy` turns this into the shelly-devices ConfigMap, so changing it
+# and re-running deploy is the whole workflow.
+#
+# These are DHCP addresses. Give each device a static lease on the router, or
+# this file goes stale the next time the lease pool shuffles. The MAC is in
+# the comment on each entry so a lease can be pinned without re-scanning;
+# `make discover` re-finds everything if they do move.
+#
+# `channels` maps the device's switch component id to the name you want on
+# the graphs. A plug has only switch:0; the Power Strip 4 Gen4 has
+# switch:0 through switch:3, one per socket.
+
+defaults:
+  timeoutMs: 4000
+
+devices:
+  # Shelly Plug S MTR Gen3 -- model S3PL-30110EU, MAC 08:3A:F2:D9:22:10
+  - name: plug-a
+    host: 192.168.0.21
+    channels:
+      0: plug-a
+
+  # Shelly Plug S MTR Gen3 -- model S3PL-30110EU, MAC 08:3A:F2:D8:E0:6C
+  - name: plug-b
+    host: 192.168.0.66
+    channels:
+      0: plug-b
+
+  # Shelly 1PM Mini Gen3 -- model S3SW-001P8EU, MAC 54:32:04:6B:8A:40
+  # Lowest signal of the four (-77 dBm), so it is the one that will time out.
+  - name: mini-1pm
+    host: 192.168.0.93
+    channels:
+      0: mini-1pm
+
+  # Shelly Power Strip 4 Gen4 -- model S4PL-00416EU, MAC E8:F6:0A:63:8D:68
+  # Four independently metered sockets. Which physical socket is which switch
+  # id is worth confirming once with `make toggle DEVICE=... CH=...`; the
+  # mapping below assumes switch:0 is the socket nearest the cable.
+  - name: power-strip
+    host: 192.168.0.128
+    channels:
+      0: strip-socket-1
+      1: strip-socket-2
+      2: strip-socket-3
+      3: strip-socket-4

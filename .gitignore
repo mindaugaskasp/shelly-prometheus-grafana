@@ -1,0 +1,9 @@
+node_modules/
+*.local.md
+*.log
+.env
+.env.*
+secrets*.yaml
+*.kubeconfig
+kubeconfig
+.DS_Store

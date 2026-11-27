@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shelly-exporter
+  namespace: energy
+  labels:
+    app: shelly-exporter
+spec:
+  replicas: 1
+  # One scraper, never two: these are single-threaded ESP32 web servers and
+  # concurrent polling of the same device makes readings flap.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: shelly-exporter
+  template:
+    metadata:
+      labels:
+        app: shelly-exporter
+      annotations:
+        # Rolls the pod when devices.yaml changes, since a mounted ConfigMap
+        # is only re-read at startup.
+        checksum/devices: "__DEVICES_CHECKSUM__"
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: exporter
+          image: localhost/shelly-prometheus-grafana/shelly-exporter:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9102
+          envFrom:
+            - configMapRef:
+                name: shelly-tariff
+          env:
+            # Only needed once the devices have auth enabled; the Secret is
+            # optional so the deployment works without it.
+            - name: SHELLY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: shelly-auth
+                  key: password
+                  optional: true
+          volumeMounts:
+            - name: devices
+              mountPath: /etc/shelly
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 10m
+              memory: 48Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: devices
+          configMap:
+            name: shelly-devices
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shelly-exporter
+  namespace: energy
+  labels:
+    app: shelly-exporter
+spec:
+  selector:
+    app: shelly-exporter
+  ports:
+    - name: http
+      port: 9102
+      targetPort: http
