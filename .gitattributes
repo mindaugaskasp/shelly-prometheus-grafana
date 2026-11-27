@@ -1,0 +1,7 @@
+# Everything here is applied or executed on Linux. A CRLF Makefile or
+# Dockerfile breaks there, and this repo is edited from Windows.
+* text=auto eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+Makefile text eol=lf
+Dockerfile text eol=lf

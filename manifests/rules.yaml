@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: energy-prometheus-rules
+  namespace: energy
+data:
+  energy.yaml: |
+    groups:
+      # The window of increase() matches the group interval exactly, so the
+      # recorded samples tile the timeline without overlapping or leaving
+      # gaps. That is what makes sum_over_time() over any range a correct
+      # total rather than an approximation:
+      #
+      #   kWh this month:  sum_over_time(shelly:energy_kwh:increase5m[30d])
+      #   EUR this month:  sum_over_time(shelly:cost_eur:increase5m[30d])
+      #
+      # Change the interval and the [5m] windows together or the totals drift.
+      - name: shelly-energy
+        interval: 5m
+        rules:
+          # Energy per channel over the last five minutes. Derived from the
+          # device's lifetime Wh counter, so a factory reset shows up as a
+          # counter reset that increase() absorbs rather than as a negative
+          # spike or a phantom month of consumption.
+          - record: shelly:energy_kwh:increase5m
+            expr: increase(shelly_energy_wh_total[5m]) / 1000
+
+          # What that five minutes cost, at the price in force during it.
+          # Recorded rather than computed in the dashboard so that history
+          # keeps the price that actually applied: re-deriving cost later
+          # would apply today's spot price to last winter's consumption.
+          - record: shelly:cost_eur:increase5m
+            expr: >-
+              shelly:energy_kwh:increase5m
+              * scalar(shelly_price_eur_per_kwh{component="total"})
+
+          # Whole-house (or whole-metered-set) rollups, so the summary panels
+          # do not have to fan out over every channel.
+          - record: shelly:power_watts:sum
+            expr: sum(shelly_power_watts)
+
+          - record: shelly:energy_kwh:increase5m:sum
+            expr: sum(shelly:energy_kwh:increase5m)
+
+          - record: shelly:cost_eur:increase5m:sum
+            expr: sum(shelly:cost_eur:increase5m)

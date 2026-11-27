@@ -1,0 +1,19 @@
+# Tariff and price-feed settings. Committed on purpose: none of it is secret,
+# and a rebuilt cluster should come back with the same cost figures.
+#
+# PRICE_FIXED_EUR_PER_KWH is everything that is not the day-ahead market
+# price -- distribution, supplier margin, excise -- excluding VAT. Take it
+# from your supplier's price list; the value below is a placeholder.
+#
+# For a flat (non-spot) tariff: set PRICE_ENABLED to "0" and put the whole
+# per-kWh price, excluding VAT, in PRICE_FIXED_EUR_PER_KWH.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shelly-tariff
+  namespace: energy
+data:
+  PRICE_ENABLED: "1"
+  PRICE_ZONE: "lt"
+  PRICE_FIXED_EUR_PER_KWH: "0.07"
+  PRICE_VAT_RATE: "0.21"
